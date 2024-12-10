@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, Platform, StyleSheet, Image } from 'react-native';
 import * as Location from 'expo-location';
+import * as Speech from 'expo-speech';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -24,7 +25,7 @@ type NavOBJ = {
 const createNavOBJ = (instruction: string, distance: number, latitude: number, longitude: number): NavOBJ => {
   return {
     instruction,
-    distance: distance * 1.5,
+    distance,
     latitude,
     longitude,
     instruct: function () {
@@ -43,9 +44,9 @@ const HomeScreen = () => {
   const iteratorRef = useRef(iterator); // Store iterator in a ref to prevent dependency re-renders
 
   const navList: NavOBJ[] = [
-    createNavOBJ('Turn left in steps:', 10.0, 28.512174801930026, 77.40950426667415),
-    createNavOBJ('Go straight', 0.0, 37.7849, -122.4294),
-    createNavOBJ('Turn right', 5.0, 37.7949, -122.4394),
+    createNavOBJ('Walk forward for steps:', 10.0, 28.5121332, 77.409751),
+    createNavOBJ('Turn Left and continue for steps: ', 4.0, 28.5121265, 77.4095868),
+    createNavOBJ('Take the elevator to the ground floor', 0.0, 28.51199851341943, 77.40966655736909),
   ];
 
   // Fetch location and set up interval for navigation updates
@@ -87,10 +88,13 @@ const HomeScreen = () => {
           );
   
           console.log("Distance to turn:", distance, "Current iterator:", iteratorRef.current);
+          console.log("current location: ", latestLocation.current.latitude, ", ", latestLocation.current.longitude);
   
-          if (distance < 10) {
-            console.log(`Instruction: ${nav.instruct()}`);
-            setInstruction({ instruction: nav.instruct() });
+          if (distance < 2) {
+            const instruction = nav.instruct();
+            console.log(`Instruction: ${instruction}`);
+            setInstruction({ instruction });
+            Speech.speak(instruction); // Speak the instruction
             setIterator((prevIterator) => prevIterator + 1); // Safely update state
           }
         }
