@@ -21,6 +21,13 @@ type NavOBJ = {
   instruct: () => string;
 };
 
+type hardcodeOBJ = {
+  instr: string;
+  time: number;
+};
+
+
+
 // Function to create a NavOBJ
 const createNavOBJ = (instruction: string, distance: number, latitude: number, longitude: number): NavOBJ => {
   return {
@@ -36,6 +43,12 @@ const createNavOBJ = (instruction: string, distance: number, latitude: number, l
   };
 };
 
+const createHardcodeOBJ = (instr: string, time: number): hardcodeOBJ => {
+  return { instr, time };
+};
+
+
+
 const HomeScreen = () => {
   const [location, setLocation] = useState<LocationType>(null);
   const latestLocation = useRef<LocationType>(null); // Ref to store the latest location
@@ -47,6 +60,17 @@ const HomeScreen = () => {
     createNavOBJ('Walk forward for steps:', 10.0, 28.5121332, 77.409751),
     createNavOBJ('Turn Left and continue for steps: ', 4.0, 28.5121265, 77.4095868),
     createNavOBJ('Take the elevator to the ground floor', 0.0, 28.51199851341943, 77.40966655736909),
+  ];
+
+  const hardcodeArray: hardcodeOBJ[] = [
+    createHardcodeOBJ('Walk straight.', 5),
+    createHardcodeOBJ('Turn left and walk straight for 8 steps.', 15),
+    createHardcodeOBJ('Walk straight for 7 steps and clear security on your left.', 10),
+	  createHardcodeOBJ('Turn left and walk straight for 8 steps.', 8),
+    createHardcodeOBJ('Slowly start climbing the stairs.', 10),
+    createHardcodeOBJ('Turn left and walk straight for 14 steps.', 10),
+	  createHardcodeOBJ('Turn left and go down the stairs slowly.', 10),
+	  createHardcodeOBJ('You are now on platform no. 2 going towards botanical garden.', 5),
   ];
 
   // Fetch location and set up interval for navigation updates
@@ -73,36 +97,49 @@ const HomeScreen = () => {
     getLocation();
   }, []); // Only runs once on mount
   
+  // useEffect(() => {
+  //   iteratorRef.current = iterator; // Keep ref updated
+  
+  //   const interval = setInterval(() => {
+  //     if (iteratorRef.current < navList.length) {
+  //       const nav = navList[iteratorRef.current];
+  //       if (latestLocation.current) {
+  //         const distance = getDistanceBetweenCoords(
+  //           latestLocation.current.latitude,
+  //           latestLocation.current.longitude,
+  //           nav.latitude,
+  //           nav.longitude
+  //         );
+  
+  //         console.log("Distance to turn:", distance, "Current iterator:", iteratorRef.current);
+  //         console.log("current location: ", latestLocation.current.latitude, ", ", latestLocation.current.longitude);
+  
+  //         if (distance < 2) {
+  //           const instruction = nav.instruct();
+  //           console.log(`Instruction: ${instruction}`);
+  //           setInstruction({ instruction });
+  //           Speech.speak(instruction); // Speak the instruction
+  //           setIterator((prevIterator) => prevIterator + 1); // Safely update state
+  //         }
+  //       }
+  //     }
+  //   }, 1000);
+  
+  //   return () => clearInterval(interval); // Cleanup interval on unmount
+  // }, [navList]); // Only re-run when navList changes
+  
+
   useEffect(() => {
-    iteratorRef.current = iterator; // Keep ref updated
-  
-    const interval = setInterval(() => {
-      if (iteratorRef.current < navList.length) {
-        const nav = navList[iteratorRef.current];
-        if (latestLocation.current) {
-          const distance = getDistanceBetweenCoords(
-            latestLocation.current.latitude,
-            latestLocation.current.longitude,
-            nav.latitude,
-            nav.longitude
-          );
-  
-          console.log("Distance to turn:", distance, "Current iterator:", iteratorRef.current);
-          console.log("current location: ", latestLocation.current.latitude, ", ", latestLocation.current.longitude);
-  
-          if (distance < 2) {
-            const instruction = nav.instruct();
-            console.log(`Instruction: ${instruction}`);
-            setInstruction({ instruction });
-            Speech.speak(instruction); // Speak the instruction
-            setIterator((prevIterator) => prevIterator + 1); // Safely update state
-          }
-        }
+    const executeInstructions = async () => {
+      for (const obj of hardcodeArray) {
+        setInstruction({ instruction: obj.instr }); // Corrected: pass `obj.instr` to `instruction`
+        Speech.speak(obj.instr); // Speak the instruction
+        await new Promise((resolve) => setTimeout(resolve, obj.time * 1000)); // Wait for specified time
       }
-    }, 1000);
+    };
   
-    return () => clearInterval(interval); // Cleanup interval on unmount
-  }, [navList]); // Only re-run when navList changes
+    executeInstructions();
+  }, []);
   
 
   return (
