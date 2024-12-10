@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, Platform, StyleSheet, Image } from 'react-native';
-import * as Location from 'expo-location'; // Importing expo-location
+import * as Location from 'expo-location';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import Tts from 'react-native-tts';
-//import { useSpeechSynthesis} from '@/react-speech-kit';
 
 type LocationType = {
   latitude: number;
@@ -37,79 +35,71 @@ const createNavOBJ = (instruction: string, distance: number, latitude: number, l
   };
 };
 
-//const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
-
-export default function HomeScreen() {
+const HomeScreen = () => {
   const [location, setLocation] = useState<LocationType>(null);
   const latestLocation = useRef<LocationType>(null); // Ref to store the latest location
-
-  const[instructiondist, setInstruction] = useState<any>({});
-  const[iterator, setIterator] = useState<number>(0);
-
-
-  // Use watchPositionAsync for continuous location updates
-  useEffect(() => {
-    const getLocation = async () => {
-      // Request location permission for Android and iOS
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location access is required.');
-        return;
-      }
-
-      // Watch for location updates
-      const locationSubscription = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 1 }, // Update every 1 second or 1 meter
-        (newLocation) => {
-          setLocation({
-            latitude: newLocation?.coords?.latitude,
-            longitude: newLocation?.coords?.longitude,
-          });
-
-          latestLocation.current = {
-            latitude: newLocation?.coords?.latitude,
-            longitude: newLocation?.coords?.longitude,
-          };
-
-          console.log('Location:', newLocation?.coords?.latitude, newLocation?.coords?.longitude); // Log the location
-          //const distance1 = getDistanceBetweenCoords(newLocation.coords.latitude, newLocation.coords.longitude, 28.5125971, 77.4099894); 
-          //console.log(`Distance: ${distance1.toFixed(2)} meters`);
-        }
-      );
-
-      // Cleanup on component unmount
-      return () => locationSubscription.remove();
-    };
-
-    // Call getLocation on initial load
-    getLocation();
-  }, []);
+  const [instructiondist, setInstruction] = useState<any>({});
+  const [iterator, setIterator] = useState<number>(0); // Maintain iterator in state
+  const iteratorRef = useRef(iterator); // Store iterator in a ref to prevent dependency re-renders
 
   const navList: NavOBJ[] = [
     createNavOBJ('Turn left in steps:', 10.0, 28.512174801930026, 77.40950426667415),
     createNavOBJ('Go straight', 0.0, 37.7849, -122.4294),
     createNavOBJ('Turn right', 5.0, 37.7949, -122.4394),
   ];
+
+  // Fetch location and set up interval for navigation updates
+  useEffect(() => {
+    const getLocation = async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location access is required.');
+        return;
+      }
   
-  // Now you can use latestLocation.current inside your loop
-  setInterval(()=>{
-    const nav = navList[iterator];
-     if (latestLocation.current) {
-       const distance = getDistanceBetweenCoords(
-         latestLocation.current.latitude,
-         latestLocation.current.longitude,
-         nav.latitude,
-         nav.longitude
-       );
-       console.log("distance to turn is: " + distance + "current i is " + iterator);
-       if (distance < 10) {
-         console.log(`Instruction: ${nav.instruct()}`);
-         setInstruction({instruction:`Instruction: ${nav.instruct()}`})
-         setIterator(iterator+1) // Exit the loop once the distance is less than 10 meters
-       }
-  //     await delay(1000);
-     }
-   },1000)
+      const locationSubscription = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 1 },
+        (newLocation) => {
+          const { latitude, longitude } = newLocation.coords;
+          setLocation({ latitude, longitude });
+          latestLocation.current = { latitude, longitude };
+        }
+      );
+  
+      return () => locationSubscription.remove();
+    };
+  
+    getLocation();
+  }, []); // Only runs once on mount
+  
+  useEffect(() => {
+    iteratorRef.current = iterator; // Keep ref updated
+  
+    const interval = setInterval(() => {
+      if (iteratorRef.current < navList.length) {
+        const nav = navList[iteratorRef.current];
+        if (latestLocation.current) {
+          const distance = getDistanceBetweenCoords(
+            latestLocation.current.latitude,
+            latestLocation.current.longitude,
+            nav.latitude,
+            nav.longitude
+          );
+  
+          console.log("Distance to turn:", distance, "Current iterator:", iteratorRef.current);
+  
+          if (distance < 10) {
+            console.log(`Instruction: ${nav.instruct()}`);
+            setInstruction({ instruction: nav.instruct() });
+            setIterator((prevIterator) => prevIterator + 1); // Safely update state
+          }
+        }
+      }
+    }, 1000);
+  
+    return () => clearInterval(interval); // Cleanup interval on unmount
+  }, [navList]); // Only re-run when navList changes
+  
 
   return (
     <ParallaxScrollView
@@ -141,7 +131,7 @@ export default function HomeScreen() {
       )}
     </ParallaxScrollView>
   );
-}
+};
 
 const getDistanceBetweenCoords = (
   lat1: number,
@@ -183,3 +173,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
 });
+
+export default HomeScreen;
