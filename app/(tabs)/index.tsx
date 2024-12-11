@@ -2,12 +2,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Alert, Platform, StyleSheet, Image, View, Text } from 'react-native';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
+import { geoContains } from 'd3-geo';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
+const geojsonPolygon = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"coordinates":[[[77.4092963664661,28.512546749161643],[77.40866437828896,28.511682889661827],[77.4098188100266,28.51107077921978],[77.4104367540217,28.512164183684803],[77.4092963664661,28.512546749161643]]],"type":"Polygon"}}]}
 // Define Location and NavOBJ types
 type LocationType = {
   latitude: number;
@@ -42,6 +44,7 @@ const HomeScreen = () => {
   const latestLocation = useRef<LocationType>(null);
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [instruction, setInstruction] = useState<string>('Fetching instructions...');
+  const [insideGeoJSON, setInsideGeoJSON] = useState<boolean>(false);
 
   const navList: NavOBJ[] = [
     createNavOBJ('Walk forward for', 10, 28.5121332, 77.409751),
@@ -63,6 +66,13 @@ const HomeScreen = () => {
         const { latitude, longitude } = newLocation.coords;
         setLocation({ latitude, longitude });
         latestLocation.current = { latitude, longitude };
+
+        //inside geojson check
+        const isInside = geojsonPolygon.features.some((feature:any) =>
+          geoContains(feature.geometry.coordinates, [longitude, latitude])
+        );
+        console.log(`User is inside geoJson: ${isInside}`);
+        setInsideGeoJSON(isInside);
       }
     );
   };
@@ -70,6 +80,12 @@ const HomeScreen = () => {
   useEffect(() => {
     getLocationUpdates();
   }, []);
+
+  useEffect(() => {
+    if (!insideGeoJSON) {
+      Speech.speak("You are outside the path");
+    }
+  }, [insideGeoJSON]);
 
   useEffect(() => {
     if (currentStep < navList.length && latestLocation.current) {
@@ -86,6 +102,8 @@ const HomeScreen = () => {
       }
     }
   }, [location, currentStep]);
+
+  
 
   return (
     <ParallaxScrollView
@@ -109,6 +127,9 @@ const HomeScreen = () => {
           <ThemedText type="subtitle">Your Current Location</ThemedText>
           <ThemedText>
             Latitude: {location.latitude.toFixed(6)}, Longitude: {location.longitude.toFixed(6)}
+          </ThemedText>
+           <ThemedText>
+            {insideGeoJSON ? "You are inside the area." : "You are outside the area."}
           </ThemedText>
         </ThemedView>
       ) : (
