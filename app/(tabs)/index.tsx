@@ -63,14 +63,14 @@ const HomeScreen = () => {
   ];
 
   const hardcodeArray: hardcodeOBJ[] = [
-    createHardcodeOBJ('Walk straight.', 5),
-    createHardcodeOBJ('Turn left and walk straight for 8 steps.', 15),
-    createHardcodeOBJ('Walk straight for 7 steps and clear security on your left.', 10),
-	  createHardcodeOBJ('Turn left and walk straight for 8 steps.', 8),
-    createHardcodeOBJ('Slowly start climbing the stairs.', 10),
-    createHardcodeOBJ('Turn left and walk straight for 14 steps.', 10),
-	  createHardcodeOBJ('Turn left and go down the stairs slowly.', 10),
-	  createHardcodeOBJ('You are now on platform no. 2 going towards botanical garden.', 5),
+    createHardcodeOBJ('Walk straight towards exit ticket scanner and scan your ticket.', 11),
+    createHardcodeOBJ('Continue forwards exitting the station.', 8),
+    // createHardcodeOBJ('Walk straight towards ticket scanner and scan your ticket.', 9),
+	  // createHardcodeOBJ('Continue forwards towards platform 1 and beware of the gap', 4),
+    // createHardcodeOBJ('You have arrived at your destination.', 0),
+    // createHardcodeOBJ('Turn left and walk straight for 14 steps.', 10),
+	  // createHardcodeOBJ('Turn left and go down the stairs slowly.', 10),
+	  // createHardcodeOBJ('You are now on platform no. 2 going towards botanical garden.', 5),
   ];
 
   // Fetch location and set up interval for navigation updates
