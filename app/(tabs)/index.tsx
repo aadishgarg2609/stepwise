@@ -60,14 +60,25 @@ const HomeScreen = () => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [instruction, setInstruction] = useState<string>('Fetching instructions...');
   const [insideGeoJSON, setInsideGeoJSON] = useState<boolean>(false);
-
+  const [isAligned, setIsAligned] = useState<{
+    isAligned: boolean;
+    nearestDistance: number;
+    bearing: number;
+  }>({
+    isAligned: false,
+    bearing: 0,
+    nearestDistance: 0
+  });
   const [heading, setHeading] = useState(0);
 
 
   const navList: NavOBJ[] = [
-    createNavOBJ('Walk forward for', 10, 28.5121332, 77.409751),
-    createNavOBJ('Turn left and continue for', 4, 28.5121265, 77.4095868),
-    createNavOBJ('Take the elevator to the ground floor', 0, 28.5119985, 77.4096666),
+    createNavOBJ('Walk forward and scan your ticket for steps:', 20, 28.512002648735002, 77.40967085034333),
+    createNavOBJ('Turn right, stay towards rhe right side of the platform, and continue for steps:', 30, 28.668415, 77.250398),
+    createNavOBJ('Climb the stairs for steps:', 50, 28.668383, 77.250551),
+    createNavOBJ('Turn left and continue for steps:', 21, 28.668339, 77.250736),
+    createNavOBJ('Turn left and descend the stairs for steps:', 50, 28.668467, 77.250774),
+    createNavOBJ('The platform is on your left. Take the metro heading to welcome metro station', 0, 28.668517, 77.250603),
   ];
 
   useEffect(() => {
@@ -81,61 +92,67 @@ const HomeScreen = () => {
   }, [insideGeoJSON]);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      console.log("Interval running...");
-      if (location && heading !== null) {
-        console.log("Location and heading are valid:", location, heading);
-        const { latitude, longitude } = location;
 
-        // Find the nearest waypoint
-        const nearestWaypoint = navList.reduce((prev, curr) => {
-          const prevDistance = getDistanceBetweenCoords(
-            latitude, longitude,
-            prev.latitude, prev.longitude
-          );
-          const currDistance = getDistanceBetweenCoords(
-            latitude, longitude,
-            curr.latitude, curr.longitude
-          );
-          return prevDistance < currDistance ? prev : curr;
+    if (location && heading !== null) {
+      console.log("Location and heading are valid:", location, heading);
+      const { latitude, longitude } = location;
+
+      // Find the nearest waypoint
+      const nearestWaypoint = navList.reduce((prev, curr) => {
+        const prevDistance = getDistanceBetweenCoords(
+          latitude, longitude,
+          prev.latitude, prev.longitude
+        );
+        const currDistance = getDistanceBetweenCoords(
+          latitude, longitude,
+          curr.latitude, curr.longitude
+        );
+        return prevDistance < currDistance ? prev : curr;
+      });
+
+      const nearestDistance = getDistanceBetweenCoords(
+        latitude, longitude,
+        nearestWaypoint.latitude, nearestWaypoint.longitude
+      );
+
+      console.log(`Distance to nearest waypoint: ${nearestDistance} meters`);
+
+      // Calculate the bearing to the nearest waypoint
+      const bearing = getRhumbLineBearing(
+        { latitude, longitude },
+        { latitude: nearestWaypoint.latitude, longitude: nearestWaypoint.longitude }
+      );
+
+      // Determine alignment with waypoint direction
+      const alignmentThreshold = 15; // Degrees
+      const difference = Math.abs(heading - bearing);
+      // if (!isAligned.isAligned) {
+        setIsAligned({
+          ...isAligned,
+          isAligned: difference <= alignmentThreshold || difference >= 360 - alignmentThreshold,
+          bearing: bearing,
+          nearestDistance: nearestDistance
         });
 
-        const nearestDistance = getDistanceBetweenCoords(
-          latitude, longitude,
-          nearestWaypoint.latitude, nearestWaypoint.longitude
-        );
-
-        console.log(`Distance to nearest waypoint: ${nearestDistance} meters`);
-
-        // Calculate the bearing to the nearest waypoint
-        const bearing = getRhumbLineBearing(
-          { latitude, longitude },
-          { latitude: nearestWaypoint.latitude, longitude: nearestWaypoint.longitude }
-        );
-
-        // Determine alignment with waypoint direction
-        const alignmentThreshold = 15; // Degrees
-        const difference = Math.abs(heading - bearing);
-        const isAligned = difference <= alignmentThreshold || difference >= 360 - alignmentThreshold;
-
-        if (!isAligned) {
-          const direction = heading > bearing
-            ? "Turn left slightly"
-            : "Turn right slightly";
-
-          Speech.speak(`${direction} to align with the waypoint.`);
-          console.log(`${direction} to align with the waypoint.`);
-        } else {
-          const stepsToWaypoint = Math.round((nearestDistance / 0.75) * 1.5); // Steps estimated (0.75m step length)
-          Speech.speak(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
-          console.log(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
-        }
-      }
-    }, 1000); // Check every 1 second
-
-    // Cleanup the interval on unmount
-    return () => clearInterval(intervalId);
+      // }
+    }
   }, [location, heading]);
+
+
+  useEffect(() => {
+    if (!isAligned.isAligned) {
+      const direction = heading > isAligned.bearing
+        ? "Turn left slightly"
+        : "Turn right slightly";
+
+      Speech.speak(`${direction} to align with the waypoint.`);
+      console.log(`${direction} to align with the waypoint.`);
+    } else {
+      const stepsToWaypoint: number = Math.round((isAligned.nearestDistance / 0.75) * 1.5); // Steps estimated (0.75m step length)
+      Speech.speak(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
+      console.log(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
+    }
+  }, [isAligned.isAligned]);
 
   useEffect(() => {
     if (currentStep < navList.length && latestLocation.current) {
@@ -144,10 +161,10 @@ const HomeScreen = () => {
 
       const distance = getDistanceBetweenCoords(latitude, longitude, target.latitude, target.longitude);
       console.log(`distance to next turn: ${Number(distance)}`);
-      if (distance < 2) {
-        const nextInstruction = target.instruct();
-        Speech.speak(nextInstruction);
-        setInstruction(nextInstruction);
+      if (distance < 7) {
+        // const nextInstruction = target.instruct();
+        // Speech.speak(nextInstruction);
+        // setInstruction(nextInstruction);
         setCurrentStep((prevStep) => prevStep + 1);
       }
     }
@@ -157,7 +174,7 @@ const HomeScreen = () => {
     const subscription = Magnetometer.addListener((data) => {
       const { x, y } = data;
       const heading = Math.atan2(y, x) * (180 / Math.PI);
-      setHeading((heading + 360) % 360); // Normalize to 0-360°
+      setHeading(Math.floor((heading + 360) % 360)); // Normalize to 0-360°
     });
 
     return () => subscription.remove();
