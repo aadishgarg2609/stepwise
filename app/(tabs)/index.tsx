@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, Platform, StyleSheet, Image, View, Text } from 'react-native';
 import * as Location from 'expo-location';
@@ -5,6 +7,7 @@ import * as Speech from 'expo-speech';
 import { geoContains } from 'd3-geo';
 import { getCompassDirection, getRhumbLineBearing } from 'geolib';
 import { Magnetometer } from 'expo-sensors';
+
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -48,11 +51,6 @@ const createNavOBJ = (instruction: string, distance: number, latitude: number, l
   };
 };
 
-const createHardcodeOBJ = (instr: string, time: number): hardcodeOBJ => {
-  return { instr, time };
-};
-
-
 
 const HomeScreen = () => {
   const [location, setLocation] = useState<LocationType>(null);
@@ -60,6 +58,8 @@ const HomeScreen = () => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [instruction, setInstruction] = useState<string>('Fetching instructions...');
   const [insideGeoJSON, setInsideGeoJSON] = useState<boolean>(false);
+//  const [shouldTriggerCondition, setShouldTriggerCondition] = useState(false); // New state for WebSocket control
+//  const [ws, setWs] = useState<WebSocket | null>(null);
   const [isAligned, setIsAligned] = useState<{
     isAligned: boolean;
     nearestDistance: number;
@@ -70,10 +70,11 @@ const HomeScreen = () => {
     nearestDistance: 0
   });
   const [heading, setHeading] = useState(0);
+  const [loopCounting, setLoopCounting] = useState<boolean>(false);
 
 
   const navList: NavOBJ[] = [
-    createNavOBJ('Walk forward and scan your ticket for steps:', 20, 28.512002648735002, 77.40967085034333),
+    createNavOBJ('Walk forward and scan your ticket for steps:', 20, 28.512043110921407, 77.40944701343976),
     createNavOBJ('Turn right, stay towards rhe right side of the platform, and continue for steps:', 30, 28.668415, 77.250398),
     createNavOBJ('Climb the stairs for steps:', 50, 28.668383, 77.250551),
     createNavOBJ('Turn left and continue for steps:', 21, 28.668339, 77.250736),
@@ -86,8 +87,8 @@ const HomeScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (!insideGeoJSON) {
-      Speech.speak("You are outside the path");
+    if (insideGeoJSON) {
+      Speech.speak("You are too close to the ledge");
     }
   }, [insideGeoJSON]);
 
@@ -141,6 +142,7 @@ const HomeScreen = () => {
 
   useEffect(() => {
     if (!isAligned.isAligned) {
+      if (loopCounting) return;
       const direction = heading > isAligned.bearing
         ? "Turn left slightly"
         : "Turn right slightly";
@@ -148,27 +150,69 @@ const HomeScreen = () => {
       Speech.speak(`${direction} to align with the waypoint.`);
       console.log(`${direction} to align with the waypoint.`);
     } else {
+      if (loopCounting) {
+        return;
+      }
+      setLoopCounting(true);
       const stepsToWaypoint: number = Math.round((isAligned.nearestDistance / 0.75) * 1.5); // Steps estimated (0.75m step length)
       Speech.speak(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
       console.log(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
     }
   }, [isAligned.isAligned]);
 
+  // useEffect(() => {
+  //   // Create a WebSocket connection to the server
+  //   const webSocket = new WebSocket('ws://192.168.1.15:8080'); // Replace with your WebSocket server IP
+
+  //   webSocket.onopen = () => {
+  //     console.log('Connected to WebSocket server');
+  //   };
+
+  //   // Listen for messages from the server
+  //   webSocket.onmessage = (event) => {
+  //     console.log('Message from server:', event.data);
+      
+  //     // If the message is "TRIGGER_CONDITION", we update the state to trigger the condition
+  //     if (event.data === 'TRIGGER_CONDITION') {
+  //       setShouldTriggerCondition(true); // Trigger the condition to be checked
+  //     }
+  //   };
+
+  //   webSocket.onerror = (error) => {
+  //     console.error('WebSocket error:', error);
+  //   };
+
+  //   webSocket.onclose = () => {
+  //     console.log('WebSocket connection closed');
+  //   };
+
+  //   setWs(webSocket);
+
+  //   return () => {
+  //     // Clean up WebSocket connection when the component is unmounted
+  //     if (ws) {
+  //       ws.close();
+  //     }
+  //   };
+  // }, []);
+
   useEffect(() => {
+    console.log("main interval running");
     if (currentStep < navList.length && latestLocation.current) {
       const { latitude, longitude } = latestLocation.current;
       const target = navList[currentStep];
 
       const distance = getDistanceBetweenCoords(latitude, longitude, target.latitude, target.longitude);
       console.log(`distance to next turn: ${Number(distance)}`);
-      if (distance < 7) {
-        // const nextInstruction = target.instruct();
-        // Speech.speak(nextInstruction);
-        // setInstruction(nextInstruction);
+      if (distance < 7) { //shouldTriggerCondition
+        //setShouldTriggerCondition(false);
+        const nextInstruction = target.instruct();
+        Speech.speak(nextInstruction);
+        setInstruction(nextInstruction);
         setCurrentStep((prevStep) => prevStep + 1);
       }
     }
-  }, [location, currentStep]);
+  }, [location, currentStep]); //, shouldTriggerCondition
 
   useEffect(() => {
     const subscription = Magnetometer.addListener((data) => {
