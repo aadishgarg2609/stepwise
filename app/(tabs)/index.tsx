@@ -1,346 +1,227 @@
-
-
-import React, { useEffect, useState, useRef } from 'react';
-import { Alert, Platform, StyleSheet, Image, View, Text } from 'react-native';
-import * as Location from 'expo-location';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import React, { useEffect } from 'react';
 import * as Speech from 'expo-speech';
-import { geoContains } from 'd3-geo';
-import { getCompassDirection, getRhumbLineBearing } from 'geolib';
-import { Magnetometer } from 'expo-sensors';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  SafeAreaView,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+const Stack = createNativeStackNavigator();
+const router = useRouter();
 
-const geojsonPolygon = { "type": "FeatureCollection", "features": [{ "type": "Feature", "properties": {}, "geometry": { "coordinates": [[[77.4092963664661, 28.512546749161643], [77.40866437828896, 28.511682889661827], [77.4098188100266, 28.51107077921978], [77.4104367540217, 28.512164183684803], [77.4092963664661, 28.512546749161643]]], "type": "Polygon" } }] }
-// Define Location and NavOBJ types
-type LocationType = {
-  latitude: number;
-  longitude: number;
-} | null;
+const HomeScreen = ({ }) => {
+  useEffect(() => {
+    // Set a timeout to display the alert after 3 seconds
+    const timer = setTimeout(() => {
+      Speech.speak("We have detected that you have exited the metro ");
+      Alert.alert(
+        "We have detected that you ahave exited the metro",
+        "Is this true?",
+        
+        [
+          { text: "Yes", onPress: () => router.push('./navigation'), },
+          { text: "No", onPress: () => console.log("User denied presence near Shastri Park") },
+        ]
+      );
+    }, 3000);
+    Speech.speak("Starting your navigation to Krishnanagar Metro Station Exit");
 
-type NavOBJ = {
-  instruction: string;
-  distance: number;
-  latitude: number;
-  longitude: number;
-  instruct: () => string;
-};
+    // Cleanup the timer when the component unmounts
+    return () => clearTimeout(timer);
+  }, []);
 
-type hardcodeOBJ = {
-  instr: string;
-  time: number;
-};
-
-
-
-// Function to create a NavOBJ
-const createNavOBJ = (instruction: string, distance: number, latitude: number, longitude: number): NavOBJ => {
-  return {
-    instruction,
-    distance,
-    latitude,
-    longitude,
-    instruct: function () {
-      return this.distance > 0
-        ? `${this.instruction} ${this.distance} meters`
-        : this.instruction;
-    },
-  };
-};
-
-
-const HomeScreen = () => {
-  const [location, setLocation] = useState<LocationType>(null);
-  const latestLocation = useRef<LocationType>(null);
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [instruction, setInstruction] = useState<string>('Fetching instructions...');
-  const [insideGeoJSON, setInsideGeoJSON] = useState<boolean>(false);
-//  const [shouldTriggerCondition, setShouldTriggerCondition] = useState(false); // New state for WebSocket control
-//  const [ws, setWs] = useState<WebSocket | null>(null);
-  const [isAligned, setIsAligned] = useState<{
-    isAligned: boolean;
-    nearestDistance: number;
-    bearing: number;
-  }>({
-    isAligned: false,
-    bearing: 0,
-    nearestDistance: 0
-  });
-  const [heading, setHeading] = useState(0);
-  const [loopCounting, setLoopCounting] = useState<boolean>(false);
-
-
-  const navList: NavOBJ[] = [
-    createNavOBJ('Walk forward and scan your ticket for steps:', 20, 28.512043110921407, 77.40944701343976),
-    createNavOBJ('Turn right, stay towards rhe right side of the platform, and continue for steps:', 30, 28.668415, 77.250398),
-    createNavOBJ('Climb the stairs for steps:', 50, 28.668383, 77.250551),
-    createNavOBJ('Turn left and continue for steps:', 21, 28.668339, 77.250736),
-    createNavOBJ('Turn left and descend the stairs for steps:', 50, 28.668467, 77.250774),
-    createNavOBJ('The platform is on your left. Take the metro heading to welcome metro station', 0, 28.668517, 77.250603),
+  const destinations = [
+    { id: 1, name: 'NOIDA', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSnYBIEy6BdDiCn-nNxnZP1lk12nKF4U89tdw&s' },
+    { id: 2, name: 'DELHI', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxTOMJj02UDRT8YIaUFVCjCZxFMjcHK7ym5Q&s' },
+    { id: 3, name: 'GURGAON', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHi9NGOq05C98jNdeNlSO8l3dDSpASViJp_w&s' },
   ];
 
-  useEffect(() => {
-    getLocationUpdates();
-  }, []);
-
-  useEffect(() => {
-    if (insideGeoJSON) {
-      Speech.speak("You are too close to the ledge");
-    }
-  }, [insideGeoJSON]);
-
-  useEffect(() => {
-
-    if (location && heading !== null) {
-      console.log("Location and heading are valid:", location, heading);
-      const { latitude, longitude } = location;
-
-      // Find the nearest waypoint
-      const nearestWaypoint = navList.reduce((prev, curr) => {
-        const prevDistance = getDistanceBetweenCoords(
-          latitude, longitude,
-          prev.latitude, prev.longitude
-        );
-        const currDistance = getDistanceBetweenCoords(
-          latitude, longitude,
-          curr.latitude, curr.longitude
-        );
-        return prevDistance < currDistance ? prev : curr;
-      });
-
-      const nearestDistance = getDistanceBetweenCoords(
-        latitude, longitude,
-        nearestWaypoint.latitude, nearestWaypoint.longitude
-      );
-
-      console.log(`Distance to nearest waypoint: ${nearestDistance} meters`);
-
-      // Calculate the bearing to the nearest waypoint
-      const bearing = getRhumbLineBearing(
-        { latitude, longitude },
-        { latitude: nearestWaypoint.latitude, longitude: nearestWaypoint.longitude }
-      );
-
-      // Determine alignment with waypoint direction
-      const alignmentThreshold = 15; // Degrees
-      const difference = Math.abs(heading - bearing);
-      // if (!isAligned.isAligned) {
-        setIsAligned({
-          ...isAligned,
-          isAligned: difference <= alignmentThreshold || difference >= 360 - alignmentThreshold,
-          bearing: bearing,
-          nearestDistance: nearestDistance
-        });
-
-      // }
-    }
-  }, [location, heading]);
-
-
-  useEffect(() => {
-    if (!isAligned.isAligned) {
-      if (loopCounting) return;
-      const direction = heading > isAligned.bearing
-        ? "Turn left slightly"
-        : "Turn right slightly";
-
-      Speech.speak(`${direction} to align with the waypoint.`);
-      console.log(`${direction} to align with the waypoint.`);
-    } else {
-      if (loopCounting) {
-        return;
-      }
-      setLoopCounting(true);
-      const stepsToWaypoint: number = Math.round((isAligned.nearestDistance / 0.75) * 1.5); // Steps estimated (0.75m step length)
-      Speech.speak(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
-      console.log(`Aligned. Move forward for approximately ${stepsToWaypoint} steps.`);
-    }
-  }, [isAligned.isAligned]);
-
-  // useEffect(() => {
-  //   // Create a WebSocket connection to the server
-  //   const webSocket = new WebSocket('ws://192.168.1.15:8080'); // Replace with your WebSocket server IP
-
-  //   webSocket.onopen = () => {
-  //     console.log('Connected to WebSocket server');
-  //   };
-
-  //   // Listen for messages from the server
-  //   webSocket.onmessage = (event) => {
-  //     console.log('Message from server:', event.data);
-      
-  //     // If the message is "TRIGGER_CONDITION", we update the state to trigger the condition
-  //     if (event.data === 'TRIGGER_CONDITION') {
-  //       setShouldTriggerCondition(true); // Trigger the condition to be checked
-  //     }
-  //   };
-
-  //   webSocket.onerror = (error) => {
-  //     console.error('WebSocket error:', error);
-  //   };
-
-  //   webSocket.onclose = () => {
-  //     console.log('WebSocket connection closed');
-  //   };
-
-  //   setWs(webSocket);
-
-  //   return () => {
-  //     // Clean up WebSocket connection when the component is unmounted
-  //     if (ws) {
-  //       ws.close();
-  //     }
-  //   };
-  // }, []);
-
-  useEffect(() => {
-    console.log("main interval running");
-    if (currentStep < navList.length && latestLocation.current) {
-      const { latitude, longitude } = latestLocation.current;
-      const target = navList[currentStep];
-
-      const distance = getDistanceBetweenCoords(latitude, longitude, target.latitude, target.longitude);
-      console.log(`distance to next turn: ${Number(distance)}`);
-      if (distance < 7) { //shouldTriggerCondition
-        //setShouldTriggerCondition(false);
-        const nextInstruction = target.instruct();
-        Speech.speak(nextInstruction);
-        setInstruction(nextInstruction);
-        setCurrentStep((prevStep) => prevStep + 1);
-      }
-    }
-  }, [location, currentStep]); //, shouldTriggerCondition
-
-  useEffect(() => {
-    const subscription = Magnetometer.addListener((data) => {
-      const { x, y } = data;
-      const heading = Math.atan2(y, x) * (180 / Math.PI);
-      setHeading(Math.floor((heading + 360) % 360)); // Normalize to 0-360°
-    });
-
-    return () => subscription.remove();
-  }, []);
-
-
-  // Function to handle location updates
-  const getLocationUpdates = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Location access is required.');
-      return;
-    }
-
-    const magnetometerPermission = await Magnetometer.isAvailableAsync();
-    if (!magnetometerPermission) {
-      Alert.alert('Magnetometer Unavailable', 'Magnetometer access is required.');
-      return false;
-    }
-
-    await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, distanceInterval: 1 },
-      (newLocation) => {
-        const { latitude, longitude } = newLocation.coords;
-        setLocation({ latitude, longitude });
-        latestLocation.current = { latitude, longitude };
-
-        //inside geojson check
-        const isInside = geojsonPolygon.features.some((feature: any) =>
-          geoContains(feature.geometry.coordinates, [longitude, latitude])
-        );
-        console.log(`User is inside geoJson: ${isInside}`);
-        setInsideGeoJSON(isInside);
-      }
-    );
-  };
+  const popularPlaces = [
+    { id: 1, name: 'SECTOR 137 STATION', image: 'https://content.jdmagicbox.com/v2/comp/delhi/u7/011pxx11.xx11.220127183432.u8u7/catalogue/noida-sector-137-metro-station-noida-metro-railway-station-fpcvptob7k.jpg' },
+    { id: 2, name: 'SHASTRI PARK', image: 'https://housing.com/news/wp-content/uploads/2023/05/Shastri-Park-Metro-Station-Delhi-Route-timings-01.png' },
+  ];
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#29353b', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/stepwisebanner.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Step-by-Step Navigation</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.instructionContainer}>
-        <ThemedText type="subtitle">Current Instruction</ThemedText>
-        <ThemedText>{instruction}</ThemedText>
-      </ThemedView>
-      {location ? (
-        <ThemedView style={styles.stepContainer}>
-          <ThemedText type="subtitle">Your Current Location</ThemedText>
-          <ThemedText>
-            Latitude: {location.latitude.toFixed(6)}, Longitude: {location.longitude.toFixed(6)}
-          </ThemedText>
-          <ThemedText>
-            {insideGeoJSON ? "You are inside the area." : "You are outside the area."}
-          </ThemedText>
-        </ThemedView>
-      ) : (
-        <ThemedView style={styles.stepContainer}>
-          <ThemedText type="subtitle">Fetching your location...</ThemedText>
-        </ThemedView>
-      )}
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity>
+          <Ionicons name="menu" size={24} color="black" />
+        </TouchableOpacity>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color="gray" />
+          <Text style={styles.searchText}>Search destinations...</Text>
+        </View>
+        <TouchableOpacity>
+          <Ionicons name="mic" size={24} color="black" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content}>
+        {/* Main Heading */}
+        <Text style={styles.heading}>WHERE SHOULD WE TAKE YOU?</Text>
+
+        {/* Destinations Grid */}
+        <View style={styles.destinationsGrid}>
+          {destinations.map((destination) => (
+            <TouchableOpacity key={destination.id} style={styles.destinationItem}>
+              <Image
+                source={{ uri: destination.image }}
+                style={styles.destinationImage}
+              />
+              <Text style={styles.destinationText}>{destination.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Popular Section */}
+        <Text style={styles.subheading}>MOST POPULAR</Text>
+        <View style={styles.popularGrid}>
+          {popularPlaces.map((place) => (
+            <TouchableOpacity key={place.id} style={styles.popularItem}>
+              <Image
+                source={{ uri: place.image }}
+                style={styles.popularImage}
+              />
+              <Text style={styles.popularText}>{place.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <View style={styles.bottomNav}>
+        <TouchableOpacity style={styles.navItem}>
+          <Ionicons name="globe-outline" size={24} color="gray" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem}>
+          <Ionicons name="create-outline" size={24} color="gray" />
+          <Text style={styles.navText}>Feedback</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem}>
+          <Ionicons name="person-outline" size={24} color="gray" />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 };
 
-// Function to calculate distance between two coordinates
-const getDistanceBetweenCoords = (
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number => {
-  const R = 6371e3; // Earth radius in meters
-  const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
-
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c; // Distance in meters
-};
-
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginVertical: 16,
-  },
-  instructionContainer: {
     padding: 16,
-    backgroundColor: '#f0f4f8',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    padding: 8,
+    backgroundColor: '#f5f5f5',
     borderRadius: 8,
+  },
+  searchText: {
+    marginLeft: 8,
+    color: 'gray',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  heading: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 24,
+  },
+  destinationsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: 32,
+  },
+  destinationItem: {
+    width: '30%',
+    alignItems: 'center',
+  },
+  destinationImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 8,
+  },
+  destinationText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  subheading: {
+    fontSize: 20,
+    fontWeight: 'bold',
     marginBottom: 16,
   },
-  stepContainer: {
-    padding: 16,
-    marginBottom: 8,
-    backgroundColor: '#e6f7ff',
-    borderRadius: 8,
+  popularGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  popularItem: {
+    width: '48%',
+  },
+  popularImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  popularText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  navItem: {
+    alignItems: 'center',
+  },
+  navText: {
+    fontSize: 12,
+    marginTop: 4,
+    color: 'gray',
   },
 });
+
+// App component with navigation container
+const App = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen 
+          name="Home" 
+          component={HomeScreen}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
 
 export default HomeScreen;
